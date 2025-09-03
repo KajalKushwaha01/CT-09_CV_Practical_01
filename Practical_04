@@ -1,0 +1,14 @@
+% Read the image
+img = imread("peppers.png");
+% Convert to grayscale
+gray_img = rgb2gray(img);
+points = detectSIFTFeatures(gray_img);
+[features, validPoints] = extractFeatures(gray_img, points);
+figure;
+imshow(gray_img);
+hold on;
+plot(validPoints.selectStrongest(50), "showOrientation", true);
+title("Image with SIFT Key Points");
+hold off;
+disp("Information about first detected SIFT key points:");
+disp(validPoints(1));
