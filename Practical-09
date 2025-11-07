@@ -1,0 +1,95 @@
+# ✅ Step 1: Install dependencies
+!pip install opencv-python scikit-image scikit-learn matplotlib
+
+# ✅ Step 2: Import required libraries
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from google.colab import files
+from skimage.feature import hog
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+import re
+import os
+
+# ✅ Step 3: Upload your images (can include group photos)
+print("📤 Upload 3–6 face images (you can include group photos too)")
+uploaded = files.upload()
+image_paths = list(uploaded.keys())
+
+# ✅ Step 4: Initialize face detector
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+# Prepare feature and label lists
+X, y = [], []
+
+# ✅ Step 5: Extract faces and features
+valid_ext = ('.jpg', '.jpeg', '.jfif', '.png')
+
+for img_path in image_paths:
+    if not img_path.lower().endswith(valid_ext):
+        print(f"⚠️ Skipping unsupported file: {img_path}")
+        continue
+
+    img = cv2.imread(img_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+    #
+    label = re.sub(r'[^a-zA-Z]', '', img_path.split('.')[0].lower())
+
+    for (x, y_, w, h) in faces:
+        face_crop = gray[y_:y_+h, x:x+w]
+        face_resized = cv2.resize(face_crop, (64, 64))
+
+        # Extract HOG features
+        features = hog(face_resized, orientations=9, pixels_per_cell=(8,8),
+                       cells_per_block=(2,2), block_norm='L2-Hys', visualize=False)
+        X.append(features)
+        y.append(label)
+
+print(f"\n✅ Total faces detected: {len(X)}")
+print(f"🧾 Labels found: {set(y)}")
+
+# ✅ Step 6: Train AdaBoost Classifier
+if len(X) > 1:
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+else:
+    print("⚠️ Only one face detected — training and testing on same sample.")
+    X_train, X_test, y_train, y_test = X, X, y, y
+
+clf = AdaBoostClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+
+# ✅ Step 7: Evaluate performance
+y_pred = clf.predict(X_test)
+print("\n📊 Classification Report:")
+print(classification_report(y_test, y_pred, zero_division=0))
+
+# ✅ Step 8: Display all detected faces with predicted labels
+print("\n🖼️ Displaying results...")
+for i in range(len(X_test)):
+    img_path = image_paths[i % len(image_paths)]
+    img = cv2.imread(img_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+    if len(faces) > 0:
+        for (x, y_, w, h) in faces:
+            face_crop = gray[y_:y_+h, x:x+w]
+            face_resized = cv2.resize(face_crop, (64, 64))
+
+            # Extract features and predict
+            features = hog(face_resized, orientations=9, pixels_per_cell=(8,8),
+                           cells_per_block=(2,2), block_norm='L2-Hys', visualize=False)
+            prediction = clf.predict([features])[0]
+
+            # Draw box and label
+            cv2.rectangle(img, (x, y_), (x+w, y_+h), (0, 255, 0), 2)
+            cv2.putText(img, prediction, (x, y_-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+
+        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        plt.title(f"Predicted Faces: {prediction}")
+        plt.axis('off')
+        plt.show()
