@@ -1,0 +1,54 @@
+pip install torch torchvision matplotlib opencv-python
+
+import torch
+import torchvision
+from torchvision.models.detection import maskrcnn_resnet50_fpn
+from torchvision.transforms import functional as F
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load pretrained Mask R-CNN model
+model = maskrcnn_resnet50_fpn(pretrained=True)
+model.eval()  # set to evaluation mode
+
+# Load image
+image_path = "image.jpg"
+image = cv2.imread(image_path)  # BGR format
+image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+# Convert to tensor
+img_tensor = F.to_tensor(image_rgb)
+
+# Run inference
+with torch.no_grad():
+    predictions = model([img_tensor])[0]
+
+# Set confidence threshold
+threshold = 0.5
+
+# Draw results on image
+output_image = image_rgb.copy()
+for idx in range(len(predictions["scores"])):
+    score = predictions["scores"][idx].item()
+    if score > threshold:
+        bbox = predictions["boxes"][idx].int().numpy()
+        mask = predictions["masks"][idx, 0].mul(255).byte().numpy()
+
+        # Apply mask
+        color = np.random.randint(0, 255, (3,))
+        for c in range(3):
+            output_image[:, :, c] = np.where(mask > 128, color[c], output_image[:, :, c])
+
+        # Draw bounding box
+        cv2.rectangle(output_image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255,0,0), 2)
+        label = predictions["labels"][idx].item()
+        cv2.putText(output_image, f"{label}:{score:.2f}", (bbox[0], bbox[1]-5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
+
+# Show the result
+plt.figure(figsize=(10, 10))
+plt.imshow(output_image)
+plt.axis('off')
+plt.show()
+
